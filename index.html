@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Socket.IO chat</title>
+    <style>
+      body { margin: 0; padding-bottom: 3rem; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+
+      #form { background: rgba(0, 0, 0, 0.15); padding: 0.25rem; position: fixed; bottom: 0; left: 0; right: 0; display: flex; height: 3rem; box-sizing: border-box; backdrop-filter: blur(10px); }
+      #input { border: none; padding: 0 1rem; flex-grow: 1; border-radius: 2rem; margin: 0.25rem; }
+      #input:focus { outline: none; }
+      #form > button { background: #333; border: none; padding: 0 1rem; margin: 0.25rem; border-radius: 3px; outline: none; color: #fff; }
+
+      #messages { list-style-type: none; margin: 0; padding: 0; }
+      #messages > li { padding: 0.5rem 1rem; }
+      #messages > li:nth-child(odd) { background: #efefef; }
+
+      .vertical-bar {
+      border-left: 1px solid black;
+      height: 500px; /* Adjust the height as needed */
+    }
+    </style>
+  </head>
+  <body>
+    <div style="margin: 2px;display: flex;" >
+      <canvas id="canvas" width="500" height="500" style="border: solid;border-width: 1px;" ></canvas>
+      <!-- <div id="bar" class="vertical-bar">asd</div> -->
+    </div>
+    <button onclick="clearData()" >REJOIN</button>
+    <!-- <ul id="messages"></ul>
+    <form id="form" action="">
+      <input id="input" autocomplete="off" /><button>Send</button>
+    </form> -->
+    <div id="players" style="display: flex;">
+    </div>
+  </body>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+  const socket = io();
+  var myId = "";
+  /** @type {HTMLCanvasElement} */
+  const canvas = document.getElementById("canvas")
+  const ctx = canvas.getContext("2d")
+  socket.on('connect',()=>{
+    console.log("connected")
+    onStart()
+  })
+  socket.on("m",onM)
+  socket.on("ready",(data)=>{
+    setCookie("id",data)
+    myId = data
+  })
+
+  function onStart(){
+    let id = getCookie("id");
+    socket.emit("ready",id)
+  }
+
+  function clearData(){
+    setCookie("id","")
+    location.reload()
+  }
+
+  function onM(data){
+    let playersDocs = document.getElementById("players")
+    playersDocs.innerHTML = ""
+    ctx.clearRect(0,0,canvas.width,canvas.height)
+    let dataLength = data.length;
+    for(let i = 0 ; i<dataLength;i+=10){
+      if(data[i+5]==undefined)continue;
+      
+      let id = data[i]
+      let x = data[i+1]
+      let y = data[i+2]
+      let shield = data[i+3]
+      let color = data[i+4]
+      let score = data[i+5]
+      let shieldTime = data[i+6]
+      let radius = data[i+7]
+      let shieldRadius = data[i+8]
+      let canBomb = data[i+9]
+      // console.log("pid:",id , x, y);
+      if(shield){
+        ctx.beginPath();
+        ctx.arc(x,y,shieldRadius,0,2*Math.PI);
+        ctx.fillStyle =`rgba(${color[0]},${color[1]},${color[2]},0.2)`;
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      let n = (shieldTime/3000)
+      ctx.arc(x,y,radius,0,n*2*Math.PI);
+      ctx.fillStyle =`rgb(${color[0]},${color[1]},${color[2]})`;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(x,y,radius,0,2*Math.PI);
+      ctx.stroke();
+      
+      if(canBomb){
+        ctx.beginPath();
+        ctx.arc(x,y,radius/2,0,2*Math.PI);
+        ctx.stroke();
+      }
+      playersDocs.innerHTML+=`
+        <div> <p style="background-color: rgb(${color[0]}, ${color[1]}, ${color[2]});">________</p> ${score} </div>
+      `;
+    }
+    let scorePointX = data[data.length-2][0]
+    let scorePointY = data[data.length-2][1]
+
+    let bombs = data[data.length-1]
+
+    if(bombs){
+      bombs.forEach(b=>{
+        if(b){
+          let x = Math.floor(b[0]);
+          let y = Math.floor(b[1]);
+          let size = Math.floor(b[2]);
+          console.log('add b',x,y,size)
+          ctx.beginPath();
+          ctx.arc(x,y,size,0,2*Math.PI);
+          ctx.stroke();
+        }
+      })
+    }
+
+    // ctx.beginPath();
+    ctx.fillStyle =`rgba(200,200,0,1)`;
+    ctx.fillRect(scorePointX-5,scorePointY-5,10,10);
+      // ctx.fill();
+      // ctx.stroke();
+  }
+  
+  let pressedKey ={w:false,a:false,s:false,d:false,lc:false,rc:false,space:false}
+  let downKeys = []
+  
+  window.addEventListener("keypress",e=>{
+    if(e.code=="KeyA"){
+      if(pressedKey.a)return
+      pressedKey.a = true
+      downKeys.push(0x0001)
+      emitMove()
+    }else if (e.code=="KeyW"){
+      if(pressedKey.w)return
+      pressedKey.w = true
+      downKeys.push(0x0010)
+      emitMove()
+    }else if (e.code=="KeyD"){
+      if(pressedKey.d)return
+      pressedKey.d = true
+      downKeys.push(0x0100)
+      emitMove()
+    }else if (e.code=="KeyS"){
+      if(pressedKey.s)return
+      pressedKey.s = true
+      downKeys.push(0x1000)
+      emitMove()
+    }else if (e.code=="KeyC"){
+      if(pressedKey.c)return
+      pressedKey.c = true
+      socket.emit("shield",true)
+    }
+    else if (e.code=="Space"){
+      if(pressedKey.space)return
+      pressedKey.space = true
+      socket.emit("bomb")
+    }
+    console.log(e.code)
+    
+  })
+  window.addEventListener("keyup",e=>{
+    if(e.code=="KeyA"){
+      downKeys.splice(downKeys.indexOf(0x0001),1)
+      emitMove()
+      pressedKey.a = false
+    }else if (e.code=="KeyW"){
+      downKeys.splice(downKeys.indexOf(0x0010),1)
+      emitMove()
+      pressedKey.w = false
+    }else if (e.code=="KeyD"){
+      downKeys.splice(downKeys.indexOf(0x0100),1)
+      emitMove()
+      pressedKey.d = false
+    }else if (e.code=="KeyS"){
+      downKeys.splice(downKeys.indexOf(0x1000),1)
+      emitMove()
+      pressedKey.s = false
+    }else if (e.code=="KeyC"){
+      pressedKey.c = false
+      socket.emit("shield",false)
+    }
+    else if (e.code=="Space"){
+      pressedKey.space = false
+    }
+  })
+
+  // Add event listener for the contextmenu event
+  canvas.addEventListener('contextmenu', blockContextMenu);
+  // Context menu event handler
+  function blockContextMenu(event) {
+    event.preventDefault();
+  }
+  // window.addEventListener("wheel",e=>{
+  //   let dir = e.deltaY>0?true:false
+  //   socket.emit("rotate",dir)
+  // })
+
+  window.addEventListener("mousedown",e=>{
+    if (event.button === 0) {
+      pressedKey.lc = true
+      socket.emit("shield",true)
+    } else if (event.button === 2) {
+      pressedKey.rc = true
+      socket.emit("shield",true)
+    }
+  })
+
+  window.addEventListener("mouseup",e=>{
+    if (event.button === 0) {
+      pressedKey.lc = false
+      socket.emit("shield",false)
+    } else if (event.button === 2) {
+      pressedKey.rc = false
+      socket.emit("shield",false)
+    }
+  })
+
+  setInterval(()=>{
+    if(pressedKey.lc){
+      socket.emit('rotate',false)
+    }else if(pressedKey.rc){
+      socket.emit('rotate',true)
+    }
+  },25)
+
+  function emitMove(){
+    let move=0x0000;
+    downKeys.forEach(k=>{
+      move |= k
+    })
+    socket.emit("move",move)
+  }
+
+  function setCookie(cname, cvalue, exdays=10) {
+    const d = new Date();
+    d.setTime(d.getTime() + (exdays*24*60*60*1000));
+    let expires = "expires="+ d.toUTCString();
+    document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+  }
+
+  function getCookie(cname) {
+    let name = cname + "=";
+    let decodedCookie = decodeURIComponent(document.cookie);
+    let ca = decodedCookie.split(';');
+    for(let i = 0; i <ca.length; i++) {
+      let c = ca[i];
+      while (c.charAt(0) == ' ') {
+        c = c.substring(1);
+      }
+      if (c.indexOf(name) == 0) {
+        return c.substring(name.length, c.length);
+      }
+    }
+    return "";
+  }
+
+  </script>
+</html>

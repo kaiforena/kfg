@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Socket.IO chat</title>
+    <style>
+      body { margin: 0; padding-bottom: 3rem; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+
+      #form { background: rgba(0, 0, 0, 0.15); padding: 0.25rem; position: fixed; bottom: 0; left: 0; right: 0; display: flex; height: 3rem; box-sizing: border-box; backdrop-filter: blur(10px); }
+      #input { border: none; padding: 0 1rem; flex-grow: 1; border-radius: 2rem; margin: 0.25rem; }
+      #input:focus { outline: none; }
+      #form > button { background: #333; border: none; padding: 0 1rem; margin: 0.25rem; border-radius: 3px; outline: none; color: #fff; }
+
+      #messages { list-style-type: none; margin: 0; padding: 0; }
+      #messages > li { padding: 0.5rem 1rem; }
+      #messages > li:nth-child(odd) { background: #efefef; }
+
+      .vertical-bar {
+      border-left: 1px solid black;
+      height: 500px; /* Adjust the height as needed */
+    }
+    </style>
+  </head>
+  <body>
+    <div style="margin: 2px;display: flex;" >
+      <canvas id="canvas" width="500" height="500" style="border: solid;border-width: 1px;" ></canvas>
+      <!-- <div id="bar" class="vertical-bar">asd</div> -->
+    </div>
+    <button onclick="clearData()" >REJOIN</button>
+    <div id="players" style="display: flex;">
+    </div>
+  </body>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+ 
+  /** @type {HTMLCanvasElement} */
+  const canvas = document.getElementById("canvas")
+  const ctx = canvas.getContext("2d")
+
+  let pressedKey ={w:false,a:false,s:false,d:false,lc:false,rc:false,space:false}
+  let downKeys = []
+  
+  window.addEventListener("keypress",e=>{
+    if(e.code=="KeyA"){
+      if(pressedKey.a)return
+      pressedKey.a = true
+      downKeys.push(0x0001)
+    }else if (e.code=="KeyW"){
+      if(pressedKey.w)return
+      pressedKey.w = true
+      downKeys.push(0x0010)
+    }else if (e.code=="KeyD"){
+      if(pressedKey.d)return
+      pressedKey.d = true
+      downKeys.push(0x0100)
+    }else if (e.code=="KeyS"){
+      if(pressedKey.s)return
+      pressedKey.s = true
+      downKeys.push(0x1000)
+    }else if (e.code=="KeyC"){
+      if(pressedKey.c)return
+      pressedKey.c = true
+    }
+    else if (e.code=="Space"){
+      if(pressedKey.space)return
+      pressedKey.space = true
+    }
+  })
+  window.addEventListener("keyup",e=>{
+    if(e.code=="KeyA"){
+      downKeys.splice(downKeys.indexOf(0x0001),1)
+      pressedKey.a = false
+    }else if (e.code=="KeyW"){
+      downKeys.splice(downKeys.indexOf(0x0010),1)
+      pressedKey.w = false
+    }else if (e.code=="KeyD"){
+      downKeys.splice(downKeys.indexOf(0x0100),1)
+      pressedKey.d = false
+    }else if (e.code=="KeyS"){
+      downKeys.splice(downKeys.indexOf(0x1000),1)
+      pressedKey.s = false
+    }else if (e.code=="KeyC"){
+      pressedKey.c = false
+    }
+    else if (e.code=="Space"){
+      pressedKey.space = false
+    }
+  })
+
+  canvas.addEventListener('contextmenu', blockContextMenu);
+  function blockContextMenu(event) {
+    event.preventDefault();
+  }
+
+  window.addEventListener("mousedown",e=>{
+    if (event.button === 0) {
+      pressedKey.lc = true
+    } else if (event.button === 2) {
+      pressedKey.rc = true
+    }
+  })
+
+  window.addEventListener("mouseup",e=>{
+    if (event.button === 0) {
+      pressedKey.lc = false
+    } else if (event.button === 2) {
+      pressedKey.rc = false
+    }
+  })
+
+  function rotate(p,t,dir,s){
+    let radians = (s * Math.PI) / 180;
+    if(!dir) radians *= -1;
+    const cosTheta = Math.cos(radians);
+    const sinTheta = Math.sin(radians);
+
+    const translatedX = t.x - p.x;
+    const translatedY = t.y - p.y;
+
+    const rotatedX = translatedX * cosTheta - translatedY * sinTheta;
+    const rotatedY = translatedX * sinTheta + translatedY * cosTheta;
+
+    t.x = rotatedX + p.x;
+    t.y = rotatedY + p.y;
+}
+
+  let cx = canvas.width/2;
+  let cy = canvas.height/2;
+
+  const circles = [{x:cx-10,y:cy-10,s:1,r:1} , {x:cx-20,y:cy-20,s:2,r:1}];
+
+  circles.forEach(c=>{
+    c.update = function (){
+        rotate({x:cx,y:cy},c,false,c.s);
+    }
+    c.distanceFromCanvasCenter = function(){
+        return Math.abs(Math.sqrt(Math.pow(c.y-cy,2)+Math.pow(c.x-cx,2)) )
+    }
+  })
+  
+  function updateAllCircles(){
+    circles.forEach(c=>{
+        c.update();
+    })
+  }
+
+
+  function drawAllCircles(){
+    circles.forEach(c=>{
+        let d = c.distanceFromCanvasCenter()
+        ctx.beginPath();
+        ctx.arc(cx,cy,d,0,2*Math.PI);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(c.x,c.y,c.r,0,2*Math.PI);
+        ctx.stroke();
+
+    })
+    
+  }
+
+  function update(){
+    updateAllCircles()
+    ctx.clearRect(0,0,canvas.width,canvas.height)
+    drawAllCircles()
+    requestAnimationFrame(update);
+  }
+
+  requestAnimationFrame(update);
+
+  </script>
+</html>
